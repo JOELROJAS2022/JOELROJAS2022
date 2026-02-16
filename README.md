@@ -1,6 +1,6 @@
 - 👋 Hi, I’m @JOELROJAS2022
 - 👀 I’m interested in Biotech
-- 🌱 I’m currently learning R and Linux
+- 🌱 I’m currently learning Data Analysis
 - 💞️ I’m looking to collaborate on systems biology
 - 📫 How to reach me jorogu2000@gmail.com
 

@@ -1,0 +1,49 @@
+% Identificar la reacción de biomasa
+biomassRxn = 'Biomass_Ecoli_core_w_GAM';
+rxnID = findRxnIDs(model, biomassRxn);
+
+% Extraer coeficientes estequiométricos de esa reacción
+stoichCoeffs = model.S(:, rxnID);
+
+% Seleccionar solo los metabolitos con coeficiente negativo (precursores)
+precursorIdx = find(stoichCoeffs < 0);
+precursors   = model.mets(precursorIdx);
+
+% Inicializar resultados
+results = {};
+
+for k = 1:length(precursors)
+    metID = precursors{k};
+    
+    % Agregar reacción de demanda para el precursor
+    modelTmp = addDemandReaction(model, metID);
+    demandRxn = ['DM_' metID];
+    
+    % Optimizar síntesis del precursor
+    modelTmp = changeObjective(modelTmp, demandRxn);
+    sol = optimizeCbModel(modelTmp);
+    
+    % Guardar tasa máxima
+    maxRate = sol.f;
+    
+    % Determinar genes esenciales para este precursor
+    essGenes = {};
+    for g = 1:length(model.genes)
+        modelKO = deleteModelGenes(modelTmp, model.genes(g));
+        solKO = optimizeCbModel(modelKO);
+        if solKO.f < 1e-6 && maxRate > 1e-6
+            essGenes{end+1} = model.genes{g};
+        end
+    end
+    
+    % Guardar resultados (con nombres de genes legibles)
+    results{k,1} = metID;
+    results{k,2} = maxRate;
+    results{k,3} = strjoin(essGenes, ', '); % convierte lista a string
+    results{k,4} = maxRate > 1e-6; % sintetizable sí/no
+end
+
+% Convertir a tabla
+T = cell2table(results, 'VariableNames', ...
+    {'Precursor','MaxRate','EssentialGenes','Synthesizable'});
+disp(T);

@@ -1,0 +1,65 @@
+%	The RAVEN compareMultipleModels function can be used to compare some basic features of different models such as reaction content and subsystem coverage. Primero extraer datos de modelos:
+model_ids = INIT_output.id;
+models = INIT_output.model;
+model_ids = arrayfun(@(i) models{i}.id, (1:numel(models))', 'UniformOutput', false);
+
+%	Comparar modelos
+res = compareMultipleModels(models);
+ 
+
+%	Visualizar distancia de Hamming con clúster:
+clustergram(res.structComp, 'Symmetric', false, 'Colormap', 'bone', 'RowLabels', res.modelIDs, 'ColumnLabels', res.modelIDs);
+
+ 
+
+%	tSNE, nos dice qué tan diferentes son, pero no da significado biológico.
+rxn2Dmap = tsne(res.reactions.matrix', 'Distance', 'hamming', 'NumDimensions', 2, 'Perplexity', 5);
+
+% plot and label the GEMs in tSNE space
+scatter(rxn2Dmap(:,1), rxn2Dmap(:,2));
+hold on
+text(rxn2Dmap(:,1), rxn2Dmap(:,2), res.modelIDs);
+
+ 
+
+%	Para tener significado biológico hay que analizar los subsistemas.
+useModels = {'adipose tissue', 'blood', 'kidney', 'liver', 'muscle'};
+keep = ismember(res.modelIDs, useModels);
+subMat = res.subsystems.matrix(:, keep);
+ 
+%	Calculate the percent difference of GEM subsystem coverage (number of reactions in the subsystem) from the mean coverage.
+subCoverage = (subMat - mean(subMat, 2)) ./ mean(subMat, 2) * 100;
+
+%	Visualize the difference in subsystem coverage with a clustergram, including only subsystems with at least a 25% difference in one or more GEMs.
+% select subsystems to include in plot
+inclSub = any(abs(subCoverage) > 25, 2);
+subNames = res.subsystems.ID(inclSub);
+
+% generate clustergram
+cg = clustergram(subCoverage(inclSub,:), 'Colormap', redbluecmap, 'DisplayRange', 100, 'rowLabels', subNames, 'columnLabels', useModels, 'ShowDendrogram', 'OFF');
+
+%	Ver cómo hace cada GEM con los 57 essential tasks para que célula humana sobreviva. Se usarpa una lista de 256 porque los GEMs fueron creados con esos 57 como restricción. Se usarán solo algunos GEMs.
+useModels = {'adipose tissue', 'blood', 'kidney', 'liver', 'muscle'};
+keep = ismember(res.modelIDs, useModels);
+
+%	Cargar los tasks metabólicos y correr compareMultipleModels junto a ellos
+taskFileName = '/my/path/Human-GEM/data/metabolicTasks/metabolicTasks_Full.xlsx';
+
+res_func = compareMultipleModels(models(keep), false, false, [], true, taskFile);
+
+%	The matrix subfield is a binary matrix indicating whether each task passed (1) or failed (0) in each GEM, and the tasks subfield contains the name of the evaluated tasks. Identify which tasks differed among the GEMs (i.e., not all passed or all failed).
+
+isDiff = ~all(res_func.funcComp.matrix == 0, 2) & ~all(res_func.funcComp.matrix == 1, 2);
+diffTasks = res_func.funcComp.tasks(isDiff)
+
+%	Generate a scatter plot to visualize GEM performance on the subset of tasks that differed.
+
+% visualize the matrix
+spy(res_func.funcComp.matrix(isDiff,:), 30);
+
+% apply some formatting changes
+set(gca, 'XTick', 1:numel(useModels), 'XTickLabel', useModels, 'XTickLabelRotation', 90, ...
+    'YTick', 1:numel(diffTasks), 'YTickLabel', diffTasks, 'YAxisLocation', 'right');
+xlabel(gca, '');
+
+ 

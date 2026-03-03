@@ -1,0 +1,22 @@
+% Buscar el índice de la reacción de hexoquinasa
+rxnID = find(strcmpi(model.rxns, 'HEX1'));  % HEX1 es el ID típico en Recon3D
+
+% Verificar si se encontró
+if isempty(rxnID)
+    error('La reacción HEX1 no se encuentra en el modelo.');
+end
+
+% Extraer la columna correspondiente en la matriz S
+stoichCol = model.S(:, rxnID);
+
+% Encontrar metabolitos involucrados (no cero)
+metIdx = find(stoichCol ~= 0);
+
+% Mostrar resultados
+fprintf('Reacción: %s\n', model.rxnNames{rxnID});
+fprintf('----------------------------------\n');
+for i = 1:length(metIdx)
+    metName = model.metNames{metIdx(i)};
+    coef = full(stoichCol(metIdx(i)));
+    fprintf('%+g\t%s\n', coef, metName);
+end

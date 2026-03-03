@@ -1,0 +1,51 @@
+initCobraToolbox(false)
+
+load('Recon3D_301.mat')
+modelRecon3D = Recon3D;
+
+load('Human-GEM.mat')
+modelHuman1 = ihuman;
+
+[deadRecon_idx, rootRecon_idx, downRecon_idx] = gapFind(modelRecon3D,'true');
+[deadHuman_idx, rootHuman_idx, downHuman_idx] = gapFind(modelHuman1,'true');
+
+deadReconMets = modelRecon3D.mets(ismember(modelRecon3D.mets, deadRecon_idx));
+rootReconMets = modelRecon3D.mets(ismember(modelRecon3D.mets,rootRecon_idx));
+downReconMets = modelRecon3D.mets(ismember(modelRecon3D.mets,downRecon_idx));
+
+deadHumanMets = modelHuman1.mets(ismember(modelHuman1.mets, deadHuman_idx));
+rootHumanMets = modelHuman1.mets(ismember(modelHuman1.mets,rootHuman_idx));
+downHumanMets = modelHuman1.mets(ismember(modelHuman1.mets,downHuman_idx));
+
+[sharedDead, ~, ~] = intersect(deadReconMets,deadHumanMets);
+[sharedRoot, ~, ~] = intersect(rootReconMets,rootHumanMets);
+[sharedDown, ~, ~] = intersect(downReconMets,downHumanMets);
+
+[onlyReconDead, ~] = setdiff(deadReconMets,deadHumanMets);
+[onlyHumanDead, ~] = setdiff(deadHumanMets,deadReconMets);
+
+[onlyReconRoot, ~] = setdiff(rootReconMets,rootHumanMets);
+[onlyHumanRoot, ~] = setdiff(rootHumanMets,rootReconMets);
+
+[onlyReconDown, ~] = setdiff(downReconMets,downHumanMets);
+[onlyHumanDown, ~] = setdiff(downHumanMets,downReconMets);
+
+TsharedDead     = table(sharedDead);
+TsharedRoot     = table(sharedRoot);
+TsharedDown     = table(sharedDown);
+TonlyReconDead  = table(onlyReconDead);
+TonlyHumanDead  = table(onlyHumanDead);
+TonlyReconRoot  = table(onlyReconRoot);
+TonlyHumanRoot  = table(onlyHumanRoot);
+TonlyReconDown  = table(onlyReconDown);
+TonlyHumanDown  = table(onlyHumanDown);
+
+writetable(TsharedDead,    'sharedDead_mets.csv','WriteVariableNames',false);
+writetable(TsharedRoot,    'sharedRoot_mets.csv','WriteVariableNames',false);
+writetable(TsharedDown,    'sharedDown_mets.csv','WriteVariableNames',false);
+writetable(TonlyReconDead, 'onlyReconDead_mets.csv','WriteVariableNames',false);
+writetable(TonlyHumanDead, 'onlyHumanDead_mets.csv','WriteVariableNames',false);
+writetable(TonlyReconRoot, 'onlyReconRoot_mets.csv','WriteVariableNames',false);
+writetable(TonlyHumanRoot, 'onlyHumanRoot_mets.csv','WriteVariableNames',false);
+writetable(TonlyReconDown, 'onlyReconDown_mets.csv','WriteVariableNames',false);
+writetable(TonlyHumanDown, 'onlyHumanDown_mets.csv','WriteVariableNames',false);

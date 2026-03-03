@@ -1,0 +1,54 @@
+%% Leer lista de metIDs directamente del Excel
+metList = readtable(filename, 'ReadVariableNames', false);
+metList = string(metList.Var1);
+
+%% Crear tabla de resultados (solo ID y Subsistema)
+results = table('Size',[0 2], ...
+    'VariableTypes', {'string','string'}, ...
+    'VariableNames', {'ID','Subsistema'});
+
+%% Loop principal
+for i = 1:length(metList)
+
+    metID = metList(i);
+
+    % Buscar coincidencia exacta en model.mets
+    idx = find(strcmpi(model.mets, metID));
+
+    if isempty(idx)
+        results = [results; {metID, ""}];
+        continue
+    end
+
+    for j = idx'
+
+        % Reacciones donde participa
+        rxnIdx = find(model.S(j,:) ~= 0);
+
+        % Extraer subsistemas asociados
+        rawSubs = model.subSystems(rxnIdx);
+
+        % Aplanar subsistemas (sin manejo de vacíos)
+        flat = {};
+        for k = 1:numel(rawSubs)
+            val = rawSubs{k};
+            while iscell(val)
+                val = val{1};
+            end
+            flat{end+1} = char(val);
+        end
+
+        % Unificar subsistemas
+        subsystems = unique(flat);
+        subsystems = strjoin(string(subsystems), "; ");
+
+        % Agregar fila
+        results = [results; {
+            metID, ...
+            subsystems
+        }];
+    end
+end
+
+%% Mostrar resultados
+disp(results)

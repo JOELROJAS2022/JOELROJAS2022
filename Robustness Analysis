@@ -1,0 +1,68 @@
+%	Para todos los ejercicios se usa el core model de E.coli:
+    modelOri = readCbModel('ecoli_core_model.mat');
+%backward compatibility with primer requires relaxation of upper bound on
+%ATPM
+modelOri = changeRxnBounds(modelOri,'ATPM',1000,'u');
+model = modelOri;
+
+
+
+
+% Variar glucose uptake.
+% Fijar oxígeno uptake a -17 (convención COBRA: uptake es negativo)
+modelA = changeRxnBounds(model, oxygenRxn, -17, 'l');
+
+% Barrido de glucosa (0 a 20 mmol/gDW/hr de uptake => bounds negativos)
+glcUptake = 0:-1:-20;                 % valores del lower bound
+growthA   = nan(size(glcUptake));
+
+for i = 1:numel(glcUptake)
+    mTmp = changeRxnBounds(modelA, glucoseRxn, glcUptake(i), 'l');
+    sol  = optimizeCbModel(mTmp);
+    growthA(i) = sol.f;               % tasa de crecimiento óptima
+end
+
+% Curva y punto de saturación (cuando deja de ser limitante la glucosa)
+% Detectar meseta: crecimiento deja de aumentar significativamente
+dg = diff(growthA);
+tolSlope = 1e-4;                      % tolerancia de cambio
+idxSatA = find(abs(dg) < tolSlope, 1, 'first') + 1;  % primer punto en meseta
+glcSat  = -glcUptake(idxSatA);        % uptake positivo equivalente
+
+% Gráfica
+figure;
+plot(-glcUptake, growthA, 'LineWidth',2); grid on;
+xlabel('Glucose uptake (mmol gDW^{-1} hr^{-1})');
+ylabel('Growth rate (hr^{-1})');
+title('Growth vs Glucose uptake (O_2 fixed at 17)');
+
+
+
+
+%	Variar O2 uptake:
+% Fijar glucosa uptake a -10
+modelB = changeRxnBounds(model, glucoseRxn, -10, 'l');
+
+% Barrido de oxígeno (0 a 20 mmol/gDW/hr de uptake => bounds negativos)
+o2Uptake = 0:-1:-20;
+growthB  = nan(size(o2Uptake));
+
+for i = 1:numel(o2Uptake)
+    mTmp = changeRxnBounds(modelB, oxygenRxn, o2Uptake(i), 'l');
+    sol  = optimizeCbModel(mTmp);
+    growthB(i) = sol.f;
+end
+
+% Curva y punto de saturación (cuando deja de ser limitante el oxígeno)
+dgB = diff(growthB);
+tolSlope = 1e-4;
+idxSatB = find(abs(dgB) < tolSlope, 1, 'first') + 1;
+o2Sat   = -o2Uptake(idxSatB);
+
+% Gráfica
+figure;
+plot(-o2Uptake, growthB, 'LineWidth',2); grid on;
+xlabel('Oxygen uptake (mmol gDW^{-1} hr^{-1})');
+ylabel('Growth rate (hr^{-1})');
+title('Growth vs Oxygen uptake (Glucose fixed at 10)');
+

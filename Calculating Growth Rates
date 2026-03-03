@@ -1,0 +1,18 @@
+% Fijar tasa de consumo de glucosa
+model = changeRxnBounds(model,'EX_glc(e)',-18.5,'l'); % uptake de glucosa
+
+% --- Caso aeróbico ---
+% Permitir oxígeno
+modelAer = changeRxnBounds(model,'EX_o2(e)',-1000,'l'); % gran disponibilidad de O2
+modelAer = changeObjective(modelAer,'Biomass_Ecoli_core_w_GAM');
+solAer = optimizeCbModel(modelAer);
+
+% --- Caso anaeróbico ---
+% Bloquear oxígeno
+modelAnaer = changeRxnBounds(model,'EX_o2(e)',0,'l'); % sin O2
+modelAnaer = changeObjective(modelAnaer,'Biomass_Ecoli_core_w_GAM');
+solAnaer = optimizeCbModel(modelAnaer);
+
+% Mostrar resultados
+fprintf('Aerobic growth rate: %f 1/h\n', solAer.f);
+fprintf('Anaerobic growth rate: %f 1/h\n', solAnaer.f);

@@ -1,0 +1,67 @@
+%	Restrinja la disponibilidad de carbono y oxígeno en el modelo. Para eso hay que encontrar los uptake exchange reactions.
+[selExc, selUpt] = findExcRxns(model);
+uptakes = model.rxns(selUpt);
+
+%	De las reacciones guardadas en uptake, busque las que tengan al menos un carbono involucrado y setee el flujo de la reacción a 0.
+subuptakeModel = extractSubNetwork(model, uptakes);
+hiCarbonRxns = findCarbonRxns(subuptakeModel,1);
+modelalter = changeRxnBounds(model, hiCarbonRxns, 0, 'b');
+
+%	Cerrar las reacciones involucradas en intercambio de oxígeno y fuentes de energía.
+energySources = {'EX_adp'; 'EX_amp(e)'; 'EX_atp(e)'; 'EX_co2(e)';...
+    'EX_coa(e)'; 'EX_fad(e)'; 'EX_fe2(e)'; 'EX_fe3(e)'; 'EX_gdp(e)';...
+    'EX_gmp(e)'; 'EX_gtp(e)'; 'EX_h(e)'; 'EX_h2o(e)'; 'EX_h2o2(e)';...
+    'EX_nad(e)'; 'EX_nadp(e)'; 'EX_no(e)'; 'EX_no2(e)'; 'EX_o2s(e)'};
+modelalter = changeRxnBounds (modelalter, energySources, 0, 'l');
+
+%	Ahora se prueba el modelo bajo condiciones aeróbicas y anaeróbicas.
+% modelfva1 represents aerobic condition
+modelfva1 = modelalter;
+modelfva1 = changeRxnBounds(modelfva1, 'EX_glc(e)', -20, 'l');
+modelfva1 = changeRxnBounds(modelfva1, 'EX_o2(e)', -1000, 'l');
+% modelfva2 represents anaerobic condition
+modelfva2 = modelalter;
+modelfva2 = changeRxnBounds(modelfva2, 'EX_glc(e)', -20, 'l');
+modelfva2 = changeRxnBounds(modelfva2, 'EX_o2(e)',  0, 'l');
+
+%	The optPercentage parameter allows one to choose whether to consider solutions that give at least a certain percentage of the optimal solution (default - 100). Setting the parameters osenseStr = 'min' or osenseStr = 'max' determines whether the flux balance analysis problem is first solved with minimization or maximisation (default - 'max'). The rxnNameList accepts a cell array list of reactions to selectively perform flux variability upon (default - all reactions of the model). This is useful for high-dimensional models as computation of flux variability for all reactions can be time consuming. The verbFlag input determines the verbose output (default - false). allowLoops input determines whether loops are allowed in the solution (default - true). Note that allowLoops==false invokes a mixed integer linear programming implementation of thermodynamically constrained flux variability analysis for each minimization or maximisation of a reaction rate. The method parameter input determines whether are the output flux vectors also minimise the 0-norm, 1-norm or 2-norm whilst maximising or minimising the flux through one reaction (default - 2-norm).
+% [minFlux, maxFlux, Vmin, Vmax] = fluxVariability(model,...
+% optPercentage,osenseStr, rxnNameList, verbFlag, allowLoops, method);
+
+%	Seleccionar las reacciones que se quieren analizar
+% Selecting several reactions of the model that we want to analyse with FVA
+
+rxnsList = {'DM_atp_c_'; 'ACOAHi'; 'ALCD21_D'; 'LALDO'; 'ME2m';...
+   		   'AKGDm'; 'PGI'; 'PGM'; 'r0062'};
+
+%	Correr FVA en los dos modelos.
+% Run FVA analysis for the model with the constraints that simulates aerobic conditions:
+[minFlux1, maxFlux1, Vmin1, Vmax1] = fluxVariability(modelfva1, 100, 'max', rxnsList)
+% Run FVA analysis for the model with the constraints that 
+% simulates anaerobic conditions:
+[minFlux2, maxFlux2, Vmin2, Vmax2] = fluxVariability(modelfva2, [], [], rxnsList) 
+
+%	Plotear
+ymax1 = maxFlux1;
+ymin1 = minFlux1;
+ymax2 = maxFlux2;
+ymin2 = minFlux2;
+ 
+maxf = table(ymax1, ymax2)
+minf = table(ymin1, ymin2)
+maxfxs = table2cell(maxf);
+minfxs = table2cell(minf);
+ 
+% Figure
+plot1 = bar(cell2mat(maxfxs(1:end, :)));
+hold on
+plot2 = bar(cell2mat(minfxs(1:end, :)));
+hold off
+xticklabels({'DM_atp_c_', 'ACOAHi', 'ALCD21__D', 'LALDO',...
+             'ME2m', 'AKGDm', 'PGI', 'PGM', 'r0062'})
+set(gca, 'XTickLabelRotation', -80);
+yticks([-1000 -800 -600 -400 -200 0 200 400 600 800 1000])
+xlabel('Reactions from the models')
+ylabel('Fluxes')
+legend({'Aerobic', 'Anaerobic'}, 'Location', 'southwest')
+title('Variations in fluxes in the aerobic and anaerobic conditions')

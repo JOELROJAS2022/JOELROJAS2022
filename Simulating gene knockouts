@@ -1,0 +1,19 @@
+%	Knockout del gen b1852 (zwf)
+modelKO = deleteModelGenes(model, {'b1852'});
+
+%	Optimizar crecimiento
+solKO = optimizeCbModel(modelKO);
+growthRateKO = solKO.f
+
+%	Pairwise combination de todos los gene deletion posibles.
+[grRatioDble, grRateKO, grRateWT] = doubleGeneDeletion(model);
+ % grRatioDble: ratio de crecimiento KO vs WT
+% grRateKO: tasas de crecimiento de cada doble KO
+% delPairs: lista de pares de genes eliminados
+
+%	Heatmap
+imagesc(grRatioDble);
+colorbar;
+xlabel('Gene index');
+ylabel('Gene index');
+title('Double gene deletion growth ratios');

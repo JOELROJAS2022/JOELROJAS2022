@@ -1,0 +1,11 @@
+% Extraer lista de metabolitos
+mets = model.mets;
+
+% Para cada metabolito, verificar si hay alguna reacción que lo produce
+rootMets = {};
+for i = 1:length(mets)
+    producingRxns = find(model.S(i,:) > 0);  % Reacciones que lo producen
+    if isempty(producingRxns)
+        rootMets{end+1} = mets{i};  % No tiene precursores internos
+    end
+end

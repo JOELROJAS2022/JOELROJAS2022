@@ -1,0 +1,17 @@
+subs = Recon3D.subSystems;
+flatSubs = {};
+for i = 1:length(subs)
+    entry = subs{i};
+    if iscell(entry)
+        flatSubs = [flatSubs; entry(:)];
+    elseif ischar(entry) || isstring(entry)
+        flatSubs = [flatSubs; {char(entry)}];
+    end
+end
+
+% Eliminar vacíos
+flatSubs = flatSubs(~cellfun(@isempty, flatSubs));
+
+% Obtener rutas únicas
+uniqueSubsystems = unique(flatSubs);
+disp(uniqueSubsystems)

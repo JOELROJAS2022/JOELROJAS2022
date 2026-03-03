@@ -1,0 +1,138 @@
+%	Setear el solvery el tipo de problema a resolver (como se usa core de E.coli no hace falta usar Gurobi).
+solverName = 'glpk';
+solverType = 'LP'; 
+changeCobraSolver(solverName, solverType);
+
+%	Cargar modelo y setear el uptake de glucosa a 18 mmol/(gDW·h).
+model = readCbModel('ecoli_core_model.mat');
+model = changeRxnBounds(model, 'EX_glc(e)', -18, 'l');
+%	Se realiza single gene deletion para ver cómo se clasifican los genes. Si es escencial, el FBA va a arrojar un valor menor a 1e-6 (valor arbitrario).
+[grRatio, grRateKO, grRateWT, delRxns,...
+hasEffect] = singleGeneDeletion(model, 'FBA', model.genes);
+essential_genes = [];
+non_EG = [];
+tol = 1e-6;
+for n = 1:length(grRateKO)
+if (grRateKO(n)<tol)||(isnan(grRateKO(n))==1)
+essential_genes = [essential_genes; model.genes(n)];
+else
+non_EG = [non_EG; n];
+end
+end
+
+% find essential reactions
+RxnRatio = singleRxnDeletion(model);
+RxnRatio(isnan(RxnRatio)) = 0;
+pFBAEssentialRxns = model.rxns(RxnRatio < tol);
+ 
+%	Identificar las reacciones no escenciales que pueden llevar flujo y las que no. Se hace con un FVA (que requiere que no haya restricciones de biomasa, por lo que se setea a 0).
+[minFluxglc, maxFluxglc] = fluxVariability(model, 0);
+pFBAnoFluxRxn = [];
+pFBAfluxRxn = [];
+for i=1:length(model.rxns)
+    if (abs(minFluxglc(i))<tol)&&(abs(maxFluxglc(i))<tol)  
+        pFBAnoFluxRxn = [pFBAnoFluxRxn i];
+    else
+        pFBAfluxRxn = [pFBAfluxRxn i];
+    end
+end
+pFBAfluxRxn = pFBAfluxRxn';          %lleva flujo
+ZeroFluxRxns = model.rxns(pFBAnoFluxRxn)  %no lleva flujo
+
+%	Con la información de las reacciones obtenidas, encontrar los genes asociados a reacciones no escenciales que tienen flujo y las que no.
+RxnGMat = full(model.rxnGeneMat);
+pFBAfluxGenes = non_EG;
+pFBAnoFluxGenes = [];
+ 
+for i = 1:length(pFBAnoFluxRxn)
+    listGenes = find(RxnGMat(pFBAnoFluxRxn(i),:));
+    for n = 1:length(listGenes)
+        pos = find(non_EG==listGenes(n));
+        if pos 
+            pFBAnoFluxGenes = [pFBAnoFluxGenes; model.genes(non_EG(pos))];
+            pFBAfluxGenes(pos) = 0;
+        end 
+    end
+end
+ 
+pFBAnoFluxGenes = unique(pFBAnoFluxGenes);
+pFBAfluxGenes(pFBAfluxGenes==0) = [];
+
+Identificar metabolically less efficient reactions. Reacciones que cuando se le exige al FVA que tenga como mínimo el 95% de capacidad de la solución óptima de la función objetivo., no tienen flujo en ellas. “No la dan”. Setear el mínimo de la función de biomasa como la mejor solución de FBA (optimal growth rate).
+FBAsolution = optimizeCbModel(model, 'max'); 
+model = changeRxnBounds(model, 'Biomass_Ecoli_core_w_GAM', FBAsolution.f, 'l');
+[minFlux2, maxFlux2] = fluxVariability(model,95);
+
+
+RxnMLE = [];
+restRxn = [];
+for i = 1:length(pFBAfluxRxn)
+    if (abs(minFlux2(pFBAfluxRxn(i)))<tol)&&(abs(maxFlux2(pFBAfluxRxn(i)))<tol);    
+        RxnMLE = [RxnMLE pFBAfluxRxn(i)];
+    else
+        restRxn = [restRxn pFBAfluxRxn(i)];
+    end
+end
+ 
+RxnMLEname = model.rxns(RxnMLE);
+%	Identificar optimal y enzymatically less efficient reactions con FBA  para encontrar la producción mínima de biomasa. Se cambian los bounds de todas las reacciones por el mínimo correspondiente obtenido en el FBA. Se corre un FVA al 100% de la solución óptima, si la reacción tiene flujo, se clasifica como óptima, si no, como enzymatically less efficient.
+FBAsolution = optimizeCbModel(model,'min','one');
+model = changeRxnBounds(model, model.rxns, FBAsolution.x, 'b');
+
+
+%	Identificar los genes de cada subgrupo
+OptimaGenes = [];
+restGenes = pFBAfluxGenes;
+for i = 1:length(RxnOptima)
+    listGenes = find(RxnGMat(RxnOptima(i), :));
+    for n = 1:length(listGenes)
+        pos = find(pFBAfluxGenes==listGenes(n));
+        if pos 
+            OptimaGenes = [OptimaGenes; model.genes(pFBAfluxGenes(pos))];
+            restGenes(pos,1) = 0;
+        end 
+    end
+end
+OptimaGenes = unique(OptimaGenes);
+restGenes(restGenes==0) = [];    
+ 
+ELEGenes = [];
+restGenes2 = restGenes;
+for i = 1:length(RxnELE)
+    listGenes = find(RxnGMat(RxnELE(i), :));
+    for n = 1:length(listGenes)
+        pos = find(restGenes==listGenes(n));
+        if pos 
+            ELEGenes = [ELEGenes; model.genes(restGenes(pos))];
+            restGenes2(pos, 1) = 0;
+        end 
+    end
+end
+ELEGenes = unique(ELEGenes);
+restGenes2(restGenes2==0) = [];
+ 
+MLEGenes = [];
+finalRemainingGenes = restGenes2;
+for i = 1:length(RxnMLE)
+    listGenes = find(RxnGMat(RxnMLE(i),:));
+    for n = 1:length(listGenes)
+        pos = find(restGenes2==listGenes(n));
+        if pos 
+            MLEGenes = [MLEGenes; model.genes(restGenes2(pos))];
+            finalRemainingGenes(pos, 1) = 0;
+        end 
+    end
+end
+MLEGenes = unique(MLEGenes);
+finalRemainingGenes(finalRemainingGenes==0) = []; 
+ 
+remainingGenes = [];
+for n = 1:length(finalRemainingGenes)
+        remainingGenes = [remainingGenes; model.genes(finalRemainingGenes(n))];
+end
+
+essential_genes
+OptimaGenes
+ELEGenes
+MLEGenes
+pFBAnoFluxGenes

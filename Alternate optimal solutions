@@ -1,0 +1,36 @@
+% Fijar succinato como fuente de carbono
+model = changeRxnBounds(model,'EX_succ(e)',-10,'l'); % uptake de succinato
+model = changeRxnBounds(model,'EX_glc(e)',0,'l');    % sin glucosa
+
+% Optimizar crecimiento
+model = changeObjective(model,'Biomass_Ecoli_core_w_GAM');
+sol = optimizeCbModel(model);
+optGrowth = sol.f;
+
+% Fijar el valor óptimo de biomasa
+model = changeRxnBounds(model,'Biomass_Ecoli_core_w_GAM',optGrowth,'l');
+model = changeRxnBounds(model,'Biomass_Ecoli_core_w_GAM',optGrowth,'u');
+
+% Ejecutar FVA en todas las reacciones
+[minFlux, maxFlux] = fluxVariability(model,100,'max');
+
+fixedReactions = {};   % mismas min y max (esenciales, sin alternativas)
+variableReactions = {}; % min < max (pueden variar)
+
+% Evaluar cada reacción
+for i = 1:length(model.rxns)
+    if abs(minFlux(i) - maxFlux(i)) < 1e-6
+        % flujo fijo en todas las soluciones óptimas
+        fixedReactions{end+1,1} = model.rxnNames{i}; % <-- nombre legible
+        fixedReactions{end,2} = minFlux(i);
+    else
+        % flujo variable en soluciones alternativas
+        variableReactions{end+1,1} = model.rxnNames{i}; % <-- nombre legible
+        variableReactions{end,2} = minFlux(i);
+        variableReactions{end,3} = maxFlux(i);
+    end
+end
+
+% Mostrar resultados
+disp('Reacciones con flujo variable (alternativas posibles):');
+disp(variableReactions);

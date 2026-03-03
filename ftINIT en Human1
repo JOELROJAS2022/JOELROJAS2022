@@ -1,0 +1,100 @@
+%	Se prepara el modelo para correr ftINIT. “prepHumanModelForftINIT” tests that the reference model (Human-GEM) can successfully perform all essential metabolic tasks (defined in data/metabolicTasks/metabolicTasks_Essential.txt), which is an important step.
+prepData = prepHumanModelForftINIT(ihuman, false, 'path/to/HumanGEM/data/metabolicTasks/metabolicTasks_Essential.txt', 'path/to/HumanGEM/model/reactions.tsv');
+save('prepData.mat', 'prepData')
+
+%	Cargar datos
+gtex_data = readtable('my/path/gtexSampForTutorialTPM.txt');
+[~, n] = size(gtex_data);
+numSamp = n-2; %the first two columns are the genes in ENSEMBL and gene symbols format
+
+%	Extract information from the table into a structure called data_struct
+% extract the tissue and gene names
+data_struct.genes = gtex_data{:, 1}; % gene names
+data_struct.tissues = gtex_data.Properties.VariableNames(3:n); 
+% sample (tissue) names
+data_struct.levels = gtex_data{:, 3:n}; % gene TPM values
+
+%	Although the original tINIT implementation always compared gene expression in the tissue of interest to the average of all other provided tissues, ftINIT enables the option to instead compare the expression to a threshold value. Here, we will use this alternative approach with a threshold value of 1 TPM.
+
+data_struct.threshold = 1;
+
+
+%	Correr ftINIT. ftINIT normally runs in two steps, of which the second is optional. The first step excludes most of the reactions without gene rules (GPRs) from the problem, and the second step determines which of those reactions should be removed.
+%	The second step can be omitted, which causes most reactions without GPRs to remain in the model. This is a good option in many cases, for example for structural comparison of models, since removal of reactions without GPRs does not provide any additional information and may add randomness in cases where there are several equally good solutions. We first run ftINIT without the second step, a setup that is called '1+0', which typically takes 30 - 60 seconds:
+
+model1 = ftINIT(prepData, data_struct.tissues{1}, [], [], data_struct, {}, getHumanGEMINITSteps('1+0'), false, true);
+
+%	As an alternative, we can run it with the second step included ('1+1'), which takes roughly 2 - 3 times as long and generates a smaller model:
+
+model2 = ftINIT(prepData, data_struct.tissues{1}, [], [], data_struct, {}, getHumanGEMINITSteps('1+1'), false, true);
+
+%	It is recommended to change the model id to a more descriptive name than the default of "INITModel". This is particularly useful when analyzing several models together.
+model1.id = data_struct.tissues{1};
+
+%	We can now run ftINIT on all samples:
+models = cell(numSamp, 1);
+for i = 1:numSamp
+    disp(['Model: ' num2str(i) ' of ' num2str(numSamp)])
+    models{i} = ftINIT(prepData, data_struct.tissues{i}, [], [], data_struct, {}, getHumanGEMINITSteps('1+0'), false, true);
+end
+
+save('models.mat', 'models')
+
+%	T-SNE basado en cantidad de reacciones que tienen en común. Usa distancia Hamming (útil para datos binarios).
+baseModel = prepData.refModel;
+
+% now build a matrix saying which reactions are on
+compMat = false(length(baseModel.rxns), length(models));
+
+for i = 1:size(compMat,2)
+    compMat(:,i) = ismember(baseModel.rxns,models{i}.rxns);
+end
+
+% run t-sne
+rng(1);  %set random seed to make reproducible
+proj_coords = tsne(double(compMat.'), 'Distance', 'hamming', 'NumDimensions', 2, 'Exaggeration', 6, 'Perplexity', 10);
+
+% export to R
+d = struct();
+d.tsneX = proj_coords(:, 1);
+d.tsneY = proj_coords(:, 2);
+save('TSNE.mat', 'd');
+
+%	Ver en R
+library(tidyverse)
+library(ggplot2)
+
+#import the data using R.matlab
+setwd("my/path") #replace with your own path where the exported data was saved
+tsneData = readMat("TSNE.mat")
+x = as.numeric(tsneData$d[,,1]$tsneX)
+y = as.numeric(tsneData$d[,,1]$tsneY)
+
+#read the tissues to be able to color the models properly
+tissues = read_tsv('gtexSampTissuesForTutorial.txt', col_names = FALSE)[[1]]
+tissFact = as.factor(tissues)
+
+#set up a tibble for the plot
+df = tibble(x=x, y=y, tissue = tissFact)
+
+color_palette = c('#B5D39B','#E7B56C','#6B97BC','#BC976B','#BC556B','#000000')  
+
+#plot the data
+fig = ggplot(df, aes(x = x, y = y, color=tissue, shape=tissue)) +
+  geom_point(size=2, stroke = 2) +
+  scale_color_manual(values = c(color_palette,color_palette), labels = levels(tissFact) ) +
+  scale_shape_manual(values = c(19,19,19,19,19,19,0,0,0,0,0,0), labels=levels(tissFact)) +
+  ggplot2::labs(y=expression("t-SNE y"), x="t-SNE x", title="Structural comparison") +
+  ggplot2::theme_bw() + 
+  ggplot2::theme(panel.background = element_rect("white", "white", 0, 0, "white"), panel.grid.major= element_blank(),panel.grid.minor= element_blank()) +
+  ggplot2::theme(legend.title = element_blank(),legend.position="bottom", legend.text=element_text(size=14)) + guides(colour = guide_legend(nrow = 4), size = guide_legend(nrow = 4), linetype = guide_legend(nrow = 4)) +
+  ggplot2::theme(text = element_text(size=14),
+                 axis.text.x = element_text(color='black', size=14),
+                 axis.text.y = element_text(color='black', size=14))
+fig
+
+#export the figure to file
+ggsave(
+  "StructCompftINIT.png",
+  plot = fig,
+  width = 8, height = 8, dpi = 300)

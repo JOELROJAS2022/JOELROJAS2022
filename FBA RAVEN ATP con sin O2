@@ -1,0 +1,63 @@
+%	Ver cuál es la función objetivo
+ihuman.rxns(ihuman.c == 1)
+% ans =
+% 
+%   1×1 cell array
+% 
+%     {'MAR13082'}
+%	FBA con RAVEN solveLP function para maximizar función objetivo biomasa.
+sol = solveLP(ihuman)
+
+% sol = 
+% 
+%   struct with fields:
+% 
+%        x: [13070×1 double]
+%        f: -187.3536
+%     stat: 1
+%      msg: 'Optimal solution found'
+The sol.f field contains the (negative) value of the objective, and the sol.x vector contains the flux value for each reaction.
+
+%	Maximizar flujo ATP solo importando glucosa:
+
+constructEquations(ihuman, 'MAR03964')
+% ans =
+% 
+%   1×1 cell array
+% 
+%     {'ATP[c] + H2O[c] => ADP[c] + H+[c] + Pi[c]'}
+
+%	Cambiar función objetivo a reacción ATP
+
+ihuman = setParam(ihuman, 'obj', 'MAR03964', 1);
+
+%	Inhibir importes excepto glucosa
+
+ihuman = setExchangeBounds(ihuman, 'glucose', -1);  % negative flux indicates import
+
+%	Hacer FBA y ver que da los 2 ATP de la fermentación
+sol = solveLP(ihuman)
+
+% sol = 
+% 
+%   struct with fields:
+% 
+%        x: [13070×1 double]
+%        f: -2
+%     stat: 1
+%      msg: 'Optimal solution found'
+
+%	Permitir ingreso de oxígeno y correr FBA de nuevo, los ATP aumentan
+
+ihuman = setExchangeBounds(ihuman, {'glucose', 'O2'}, [-1, -1000]);
+
+sol = solveLP(ihuman)
+
+% sol = 
+% 
+%   struct with fields:
+% 
+%        x: [13070×1 double]
+%        f: -31.5000
+%     stat: 1
+%      msg: 'Optimal solution found'

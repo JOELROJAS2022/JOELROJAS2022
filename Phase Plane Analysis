@@ -1,0 +1,24 @@
+% Define ranges (uptake negative in COBRA)
+glcRange = 0:-1:-20;
+o2Range  = 0:-1:-20;
+
+% Initialize matrix for growth rates
+growthPPP = nan(length(glcRange), length(o2Range));
+
+% Double loop over glucose and oxygen
+for i = 1:length(glcRange)
+    for j = 1:length(o2Range)
+        mTmp = changeRxnBounds(model, glucoseRxn, glcRange(i), 'l');
+        mTmp = changeRxnBounds(mTmp, oxygenRxn, o2Range(j), 'l');
+        sol  = optimizeCbModel(mTmp);
+        growthPPP(i,j) = sol.f;
+    end
+end
+
+% Plot phase plane
+figure;
+imagesc(-o2Range, -glcRange, growthPPP); % axes positive
+xlabel('Oxygen uptake (mmol gDW^{-1} hr^{-1})');
+ylabel('Glucose uptake (mmol gDW^{-1} hr^{-1})');
+colorbar;
+title('Phenotypic Phase Plane: Growth vs Glucose & Oxygen');

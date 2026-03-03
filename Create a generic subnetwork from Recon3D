@@ -1,0 +1,84 @@
+%	Cambiar solver
+solverName = 'gurobi';
+changeCobraSolver(solverName, 'LP');
+
+%	Abrir modelo
+model = readCbModel([]);
+
+%	Campo que indica el tipo de restricción para cada fila de S. Puede contener: 
+'E' = igualdad, 'G' = mayor o igual, 'L' = menor o igual. Queremos que sea igual
+
+model.csense(1:size(model.S,1),1) = 'E';
+
+%	Set the lower bounds on all biomass reactions and sink/demand reactions to zero. Restringir la producción de biomasa y el consumo/acumulación de metabolitos externos, para que el modelo se enfoque en otras rutas metabólicas o para simular condiciones específicas
+
+
+model.lb(find(ismember(model.rxns, 'biomass_reaction'))) = 0;
+model.lb(find(ismember(model.rxns, 'biomass_maintenance_noTrTr'))) = 0;
+model.lb(find(ismember(model.rxns, 'biomass_maintenance'))) = 0;
+DMs = (strmatch('DM_', model.rxns));
+model.lb(DMs) = 0;
+Sinks = (strmatch('sink_', model.rxns));
+model.lb(Sinks) = 0;
+model.ub(Sinks) = 1000;
+
+%	 Identify the model reactions that are needed to ensure that all carbon sources result in a physiologically relevant ATP yield.
+
+[Table_csourcesOri, TestedRxnsC, Perc] = testATPYieldFromCsources(model);
+
+ 
+%	Identify the model reactions that are needed to ensure that all metabolic functions can have a non-zero flux. 
+
+    [TestSolutionOri,TestSolutionNameClosedSinks, TestedRxnsClosedSinks, PercClosedSinks] = test4HumanFctExt(model, 'all', 0);
+
+
+ 
+
+%  Si PercClosedSinks es bajo, el modelo no puede realizar muchas funciones esenciales sin usar "sinks", lo que puede indicar problemas estructurales. 21,1 % para Recon3D.
+
+
+%	Agarrar rxns probadas con configuración estándar (paso anterior de ATP) y sink cerrados. Luego, agarrar las reacciones que verdaeramente están en el modelo. RxnsX se usa luego para extraer flujos o hacer simulaciones.
+
+    TestedRxns = unique([TestedRxnsC; TestedRxnsClosedSinks]);
+
+    TestedRxnsX = intersect(model.rxns,TestedRxns); 
+
+
+%	Next we remove all human metabolic reactions that are not needed for the aforementioned tasks.
+
+HMR = model.rxns(strmatch('HMR_',model.rxns));
+    HMR_NE = setdiff(HMR,TestedRxnsX);
+    model.lb(find(ismember(model.rxns,HMR_NE))) = 0;
+    model.ub(find(ismember(model.rxns,HMR_NE))) = 0;
+
+%	We will also remove all drug module reactions, i.e., those ones with the term 'Xeno' in the subsystem
+    DM = model.rxns(strmatch('Xeno', model.subSystems));
+    model.lb(find(ismember(model.rxns, DM))) = 0;
+    model.ub(find(ismember(model.rxns, DM))) = 0;
+    DMt = (strmatch('Transport of Xenobiotic', model.rxnNames));
+    model.lb(DMt) = 0;
+    model.ub(DMt) = 0;
+
+%	We will also remove all reactions from the 'Peptide metabolism' subsystem
+DM = model.rxns(strmatch('Peptide metabolism',model.subSystems));
+    model.lb(find(ismember(model.rxns, DM))) = 0;
+    model.ub(find(ismember(model.rxns, DM))) = 0;
+
+
+%	We will use the method FASTCORE, 'fastcc', to ensure a flux-consistent subnetwork
+param.epsilon = 1e-4;
+param.modeFlag = 0;
+param.method = 'fastcc'; %'null_fastcc'
+printLevel = 2;
+[fluxConsistentMetBool, fluxConsistentRxnBool, fluxInConsistentMetBool, fluxInConsistentRxnBool, modelOut] = findFluxConsistentSubset(model, param, printLevel);
+
+ 
+
+%	And remove the flux inconsistent reactions from the model.
+modelConsistent = removeRxns(model,model.rxns(find(fluxInConsistentRxnBool)));
+
+
+%	Ver tamaño de modelo reducido.
+
+[nMet,nRxn] = size(modelConsistent.S);
+fprintf('%6s\t%6s\n','#mets','#rxns'); fprintf('%6u\t%6u\t%s%s\n',nMet,nRxn,' total in Recon subnetwork')

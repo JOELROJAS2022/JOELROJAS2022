@@ -1,0 +1,45 @@
+% Cargar modelo
+model = readCbModel('ecoli_core_model.mat');
+
+% Lista de los 13 sustratos del modelo core
+substrates = {
+    'EX_acald(e)', 'EX_ac(e)', 'EX_akg(e)', 'EX_etoh(e)', 'EX_for(e)', ...
+    'EX_fru(e)', 'EX_fum(e)', 'EX_glc(e)', 'EX_gln_L(e)', 'EX_glu_L(e)', ...
+    'EX_lac_D(e)', 'EX_mal_L(e)', 'EX_pyr(e)'
+};
+
+% Inicializar resultados
+results = {};
+
+for i = 1:length(substrates)
+    % Copiar modelo base
+    modelTmp = model;
+    
+    % Resetear todos los uptakes
+    for j = 1:length(substrates)
+        modelTmp = changeRxnBounds(modelTmp, substrates{j}, 0, 'l');
+    end
+    
+    % Fijar uptake del sustrato actual (ejemplo: -10 mmol/gDW/h)
+    modelTmp = changeRxnBounds(modelTmp, substrates{i}, -10, 'l');
+    
+    % --- Caso aeróbico ---
+    modelAer = changeRxnBounds(modelTmp,'EX_o2(e)',-1000,'l'); % O2 disponible
+    modelAer = changeObjective(modelAer,'Biomass_Ecoli_core_w_GAM');
+    solAer = optimizeCbModel(modelAer);
+    
+    % --- Caso anaeróbico ---
+    modelAnaer = changeRxnBounds(modelTmp,'EX_o2(e)',0,'l'); % sin O2
+    modelAnaer = changeObjective(modelAnaer,'Biomass_Ecoli_core_w_GAM');
+    solAnaer = optimizeCbModel(modelAnaer);
+    
+    % Guardar resultados
+    results{i,1} = substrates{i};
+    results{i,2} = solAer.f;   % crecimiento aeróbico
+    results{i,3} = solAnaer.f; % crecimiento anaeróbico
+end
+
+% Convertir a tabla
+T = cell2table(results, 'VariableNames', ...
+    {'Substrate','AerobicGrowth','AnaerobicGrowth'});
+disp(T);
